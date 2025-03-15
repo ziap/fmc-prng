@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdint>
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -133,19 +134,27 @@ struct SpectralTest {
 };
 
 struct Splitmix {
-  static constexpr uint64_t INC = 0x9e3779b97f4a7c15;
-  uint64_t s;
+  uint64_t state;
+  uint64_t gamma;
+
+  static Splitmix init(uint64_t seed) {
+    return Splitmix { seed, 0x9e3779b97f4a7c15 };
+  }
 
   uint64_t next() {
-    uint64_t z = this->s += INC;
+    uint64_t z = (this->state += this->gamma);
     z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
     z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
     return z ^ (z >> 31);
   }
 
-  Splitmix fork(uint64_t step) {
-    uint64_t z = this->s += INC * step;
-    return { z };
+  Splitmix split() {
+    uint64_t next_seed = (this->state += this->gamma);
+    uint64_t z = next_seed;
+    z = (z ^ (z >> 33)) * 0xff51afd7ed558ccd;
+    z = (z ^ (z >> 33)) * 0xc4ceb9fe1a85ec53;
+    z = (z ^ (z >> 33)) | 1;
+    return Splitmix { next_seed, z };
   }
 };
 
@@ -200,18 +209,18 @@ int main(void) {
   size_t work_per_thread = total / (thread_count + 1);
   size_t remaining_work = total - thread_count * work_per_thread;
 
-  NTL::SetSeed(NTL::conv<NTL::ZZ>(thread_count * 42));
+  NTL::SetSeed(NTL::conv<NTL::ZZ>(42));
 
   NTL::ZZ seed;
   NTL::RandomBits(seed, 64);
   
-  Splitmix rng = { NTL::conv<uint64_t>(seed) };
+  Splitmix rng = Splitmix::init(NTL::conv<uint64_t>(seed));
 
-  using Result = std::future<std::vector<Candidate>>[];
-  std::unique_ptr<Result> threads = std::make_unique<Result>(thread_count);
+  using Result = std::future<std::vector<Candidate>>;
+  std::unique_ptr<Result[]> threads = std::make_unique<Result[]>(thread_count);
   for (size_t i = 0; i < thread_count; ++i) {
     size_t thread_id = i + 1;
-    Splitmix local_rng = rng.fork(281474976710656);
+    Splitmix local_rng = rng.split();
     threads[i] = std::async(std::launch::async, search, local_rng, thread_id, work_per_thread);
   }
 

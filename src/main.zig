@@ -1,5 +1,5 @@
 const Fmc256 = struct {
-  const MUL = 0xfce44986bf155cc5;
+  const MUL = 0xffbef2eace277705;
 
   state: [3]u64,
   carry: u64,

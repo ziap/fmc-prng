@@ -1,6 +1,7 @@
 import pandas as pd
 
-data = pd.read_csv("candidates.csv").drop_duplicates()
+data = pd.read_csv("candidates.csv")
+data.drop_duplicates(inplace=True)
 columns = ["Spectral mod B", "Spectral lag-1 mod M", "Spectral lag-2 mod M"]
 
 # Keep only the upper 25% quantile

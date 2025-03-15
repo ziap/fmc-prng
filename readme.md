@@ -1,4 +1,4 @@
-# Folded Multiply-With-Carry PRNG
+# Folded Multiply-with-Carry PRNG
 
 An implementation of Marsaglia's Multiply-With-Carry generators, with an extra
 scrambling operation of folding the upper and lower halves of the
@@ -15,7 +15,7 @@ typedef struct {
   uint64_t carry; // For simplicity, initialize with 1
 } Fmc256;
 
-#define MUL 0xfce44986bf155cc5
+#define MUL 0xffbef2eace277705
 
 uint64_t Fmc256_next(Fmc256 *rng) {
   uint64_t result = rng->state[2] ^ rng->carry;
