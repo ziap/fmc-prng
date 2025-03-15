@@ -91,11 +91,6 @@ struct SpectralTest {
     NTL::ZZ alag = NTL::PowerMod(a, lag, this->mod);
     NTL::ZZ mod = this->mod / NTL::GCD(this->mod, NTL::conv<NTL::ZZ>(lag));
 
-    // See Knuth TAoCP Vol. 2, 3.3.4, Exercise 20.
-    if ((this->mod & (this->mod - 1)) == 0) {
-      mod /= 4;
-    }
-
     double tnorm[dim_max - 1];
 
     for(int d = 2; d <= dim_max; d++) {
@@ -149,12 +144,7 @@ struct Splitmix {
   }
 
   Splitmix split() {
-    uint64_t next_seed = (this->state += this->gamma);
-    uint64_t z = next_seed;
-    z = (z ^ (z >> 33)) * 0xff51afd7ed558ccd;
-    z = (z ^ (z >> 33)) * 0xc4ceb9fe1a85ec53;
-    z = (z ^ (z >> 33)) | 1;
-    return Splitmix { next_seed, z };
+    return Splitmix { this->next(), this->next() | 1 };
   }
 };
 

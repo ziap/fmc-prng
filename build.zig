@@ -33,7 +33,7 @@ pub fn build(b: *std.Build) void {
 
   const example = b.addExecutable(.{
     .name = "example",
-    .root_source_file = b.path("src/main.zig"),
+    .root_source_file = b.path("src/example.zig"),
     .target = target,
     .optimize = optimize,
     .strip = strip,
@@ -48,4 +48,22 @@ pub fn build(b: *std.Build) void {
 
   const example_run = b.step("example", "Run the example");
   example_run.dependOn(&example_cmd.step);
+
+  const speed_test = b.addExecutable(.{
+    .name = "speed_test",
+    .root_source_file = b.path("src/speed-test.zig"),
+    .target = target,
+    .optimize = optimize,
+    .strip = strip,
+  });
+
+  b.installArtifact(speed_test);
+
+  const speed_test_cmd = b.addRunArtifact(speed_test);
+  if (b.args) |args| {
+    speed_test_cmd.addArgs(args);
+  }
+
+  const speed_test_run = b.step("speed-test", "Run the speed test");
+  speed_test_run.dependOn(&speed_test_cmd.step);
 }
