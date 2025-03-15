@@ -76,7 +76,7 @@ struct SpectralTest {
   NTL::ZZ mod;
 
   static SpectralTest create(const NTL::ZZ &mod) {
-    SpectralTest test = { 8, mod };
+    SpectralTest test = { 16, mod };
 
     return test;
   }
@@ -167,7 +167,7 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
       std::cout << "Progress: " << iteration << '\t';
       std::cout << "Found:    " << found << '\n';
     }
-    uint64_t x = (local_rng.next() | 0xc000000000000007) ^ 2;
+    uint64_t x = local_rng.next() | 0xc000000000000000;
     NTL::ZZ a = NTL::conv<NTL::ZZ>(x);
     NTL::ZZ m = (a << 192) - 1;
 

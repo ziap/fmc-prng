@@ -1,6 +1,6 @@
 const Fmc256 = @This();
 
-const MUL = 0xfe75b4b63fa1a8a5;
+const MUL = 0xfd47b3f4e954a25e;
 
 state: [3]u64,
 carry: u64,
