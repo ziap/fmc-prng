@@ -14,7 +14,10 @@ pub fn main() !void {
     0x082efa98ec4e6c89,
   });
 
+  var jumped = rng;
+  jumped.jump(Fmc256.JUMP_SMALL);
+
   for (0..20) |_| {
-    writer.print("{x}\n", .{ rng.next() }) catch return;
+    writer.print("{x} - {x}\n", .{ rng.next(), jumped.next() }) catch return;
   }
 }
