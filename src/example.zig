@@ -14,8 +14,12 @@ pub fn main() !void {
     0x082efa98ec4e6c89,
   });
 
+  const n = 50_000_000;
+
   var jumped = rng;
-  jumped.jump(Fmc256.JUMP_SMALL);
+  for (0..n) |_| _ = rng.next();
+
+  jumped.jump(n);
 
   for (0..20) |_| {
     writer.print("{x} - {x}\n", .{ rng.next(), jumped.next() }) catch return;

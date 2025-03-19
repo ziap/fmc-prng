@@ -76,20 +76,16 @@ struct SpectralTest {
   NTL::ZZ mod;
 
   static SpectralTest create(const NTL::ZZ &mod) {
-    SpectralTest test = { 16, mod };
+    SpectralTest test = { 24, mod };
 
     return test;
   }
 
-  double test(const NTL::ZZ &a, double threshold, size_t lag) {
+  double test(const NTL::ZZ &a, double threshold) {
     if (a >= this->mod) {
       std::cerr << "The multiplier must be smaller than the modulus\n";
       return 0;
     }
-
-    // Entacher's characterization of lagged lattices (https://dl.acm.org/doi/10.1145/301677.301682)
-    NTL::ZZ alag = NTL::PowerMod(a, lag, this->mod);
-    NTL::ZZ mod = this->mod / NTL::GCD(this->mod, NTL::conv<NTL::ZZ>(lag));
 
     double tnorm[dim_max - 1];
 
@@ -107,7 +103,7 @@ struct SpectralTest {
       // Dual lattice (see Knuth TAoCP Vol. 2, 3.3.4/B*).
       mat[0][0] = mod;
       for (int i = 1; i < d; i++) mat[i][i] = 1;
-      for (int i = 1; i < d; i++) mat[i][0] = -NTL::power(alag, i);
+      for (int i = 1; i < d; i++) mat[i][0] = -NTL::power(a, i);
       NTL::ZZ det2;
       // LLL reduction with delta = 0.999999999
       NTL::LLL(det2, mat, 999999999, 1000000000);
@@ -150,17 +146,17 @@ struct Splitmix {
 
 struct Candidate {
   uint64_t multiplier;
-  double spectral_scores[3];
+  double spectral_score;
 };
 
 std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total) {
-  SpectralTest test1 = SpectralTest::create(NTL::conv<NTL::ZZ>(1) << 64);
-
   std::vector<Candidate> result;
-  size_t update_step = total / 100;
+  size_t update_step = 1 << 24;
   size_t found = 0;
 
-  double threshold = 0.5;
+  NTL::ZZ b = NTL::conv<NTL::ZZ>(1) << 64;
+  SpectralTest test = SpectralTest::create(b);
+
   for (size_t iteration = 0; iteration < total; ++iteration) {
     if ((iteration + 1) % update_step == 0) {
       std::cout << "[Thread #" << thread_id << "]:\t";
@@ -170,22 +166,16 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
     uint64_t x = local_rng.next() | 0xc000000000000000;
     NTL::ZZ a = NTL::conv<NTL::ZZ>(x);
     NTL::ZZ m = (a << 192) - 1;
+    NTL::ZZ p = m >> 1;
 
     if (!NTL::ProbPrime(m)) continue;
-    if (!NTL::ProbPrime(m >> 1)) continue;
+    if (!NTL::ProbPrime(p)) continue;
 
-    double score1 = test1.test(a, threshold, 1);
-    if (score1 == 0) continue;
-
-    SpectralTest test2 = SpectralTest::create(m);
-    double score2 = test2.test(a, threshold, 2);
-    if (score2 == 0) continue;
-    double score3 = test2.test(a, threshold, 3);
-    if (score3 == 0) continue;
+    double score = test.test(a, 0.5);
+    if (score == 0) continue;
 
     ++found;
-
-    result.emplace_back(Candidate { x, { score1, score2, score3 } });
+    result.emplace_back(Candidate { x, score });
   }
 
   return result;
@@ -195,7 +185,7 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
 
 int main(void) {
   size_t thread_count = std::thread::hardware_concurrency() - 1;
-  size_t total = 8589934592;
+  size_t total = 4294967296;
   size_t work_per_thread = total / (thread_count + 1);
   size_t remaining_work = total - thread_count * work_per_thread;
 
@@ -215,26 +205,18 @@ int main(void) {
   }
 
   std::ofstream fout("candidates.csv");
-  fout << "Multiplier,Spectral mod B,Spectral lag-1 mod M,Spectral lag-2 mod M\n";
+  fout << "Multiplier,Spectral score\n";
 
   std::vector main_result = search(rng, 0, remaining_work);
 
   for (size_t i = 0; i < thread_count; ++i) {
     for (const Candidate &candidate : threads[i].get()) {
-      fout << hex(candidate.multiplier);
-      for (double score : candidate.spectral_scores) {
-        fout << ',' << score;
-      }
-      fout << '\n';
+      fout << hex(candidate.multiplier) << ',' << candidate.spectral_score << '\n';
     }
   }
 
   for (const Candidate &candidate : main_result) {
-    fout << hex(candidate.multiplier);
-    for (double score : candidate.spectral_scores) {
-      fout << ',' << score;
-    }
-    fout << '\n';
+    fout << hex(candidate.multiplier) << ',' << candidate.spectral_score << '\n';
   }
 
   return 0;
