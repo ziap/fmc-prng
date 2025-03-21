@@ -55,7 +55,7 @@ const Montgomery = struct {
     // Perform Montgomery reduction
     const q: u256 = lo *% MOD_INV;
     const m: u256 = @intCast((@as(u512, q) * MOD) >> 256);
-    if (hi < m) return hi +% MOD -% m;
+    if (hi < m) return hi + (MOD - m);
     return hi - m;
   }
 
