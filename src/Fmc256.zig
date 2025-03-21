@@ -24,7 +24,6 @@ pub fn fromSeed(seed: *const [4]u64) Fmc256 {
 
 pub fn next(self: *Fmc256) u64 {
   const result = self.state[2] ^ self.carry;
-
   const m = @as(u128, self.state[0]) * MUL + self.carry;
   self.state[0] = self.state[1];
   self.state[1] = self.state[2];
@@ -55,7 +54,7 @@ const Montgomery = struct {
 
     // Perform Montgomery reduction
     const q: u256 = lo *% MOD_INV;
-    const m: u256 = @truncate((@as(u512, q) * MOD) >> 256);
+    const m: u256 = @intCast((@as(u512, q) * MOD) >> 256);
     if (hi < m) return hi +% MOD -% m;
     return hi - m;
   }
