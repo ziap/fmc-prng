@@ -6,6 +6,23 @@ const MOD = (MUL << 192) - 1;
 pub const JUMP_SMALL = 1 << 128;
 pub const JUMP_BIG = 1 << 192;
 
+pub const JUMP_PHI = blk: {
+  // Initial approximation: 0.625
+  var x = MOD * 5 / 8;
+  var dec = false;
+
+  // Newton's method iterations
+  while (true) {
+    const nx = (MOD * MOD + x * x) / (MOD + 2 * x);
+    if (x == nx or (dec and nx > x)) break;
+
+    dec = nx < x;
+    x = nx;
+  }
+
+  break :blk x;
+};
+
 state: [3]u64,
 carry: u64,
 

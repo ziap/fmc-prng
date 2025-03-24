@@ -21,22 +21,23 @@ const Pcg32x2 = struct {
   }
 };
 
-// Adapted from: <https://github.com/numpy/numpy/issues/13635#issuecomment-506088698>
-const PcgDXSM = struct {
+// PCG XSL-RR with a cheap state transition function
+const Pcg64CM = struct {
   state: u128,
 
-  fn next(self: *PcgDXSM) u64 {
-    const MUL = 0xda942042e4dd58b5;
-    const INC = 0x5851f42d4c957f2d14057b7ef767814f;
+  fn next(self: *Pcg64CM) u64 {
+    const S = struct {
+      inline fn rotl(data: u64, rot: u6) u64 {
+        return (data << rot) | (data >> -% rot);
+      }
+    };
 
     const state = self.state;
-    self.state = self.state *% MUL +% INC;
+    self.state = self.state *% 0xfc0072fa0b15f4fd +% 1;
 
-    var hi: u64 = @intCast(state >> 64);
+    const hi: u64 = @intCast(state >> 64);
     const lo: u64 = @truncate(state);
-
-    hi = (hi ^ (hi >> 32)) *% MUL;
-    return (hi ^ (hi >> 48)) *% (lo | 1);
+    return S.rotl(hi ^ lo, @intCast(hi >> 58));
   }
 };
 
@@ -46,7 +47,7 @@ const Lehmer64 = struct {
   state: u128,
 
   fn next(self: *Lehmer64) u64 {
-    self.state *%= 0xda942042e4dd58b5;
+    self.state *%= 0xdefba91144f2b375;
     return @intCast(self.state >> 64);
   }
 };
@@ -57,7 +58,7 @@ const Xoshiro256 = struct {
 
   fn next(self: *Xoshiro256) u64 {
     const S = struct {
-      inline fn rotl(data: u64, rot: u6) u64 {
+      inline fn rotl(data: u64, comptime rot: u6) u64 {
         return (data << rot) | (data >> -% rot);
       }
     };
@@ -112,7 +113,7 @@ const Wyrand = struct {
   }
 };
 
-const generators = .{ Fmc256, Pcg32x2, PcgDXSM, Lehmer64, Xoshiro256, Splitmix64, Wyrand };
+const generators = .{ Fmc256, Pcg32x2, Pcg64CM, Lehmer64, Xoshiro256, Splitmix64, Wyrand };
 
 fn monteCarloPI64(rng: anytype, count: u64) f64 {
   var hit: u64 = 0;
