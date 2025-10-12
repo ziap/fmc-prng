@@ -39,6 +39,48 @@ pub fn fromSeed(seed: *const [4]u64) Fmc256 {
   };
 }
 
+/// Construct an RNG from an entropy byte sequence
+pub fn fromBytes(data: []const u8) Fmc256 {
+  var state: [3]u64 = @splat(0);
+  var carry: u128 = 0;
+
+  const step = @sizeOf(@TypeOf(state));
+  var idx: usize = 0;
+
+  while (idx + step < data.len) {
+    var chunk: [3]u64 = undefined;
+    const chunk_ptr: *[step]u8 = @ptrCast(&chunk);
+    @memcpy(chunk_ptr, data[idx..idx + step]);
+    idx += step;
+
+    for (&state, &chunk) |*item, limb| {
+      const m = (@as(u128, item.* + limb)) * MUL + carry;
+      item.* = @truncate(m);
+      carry = m >> 64;
+    }
+  }
+
+  var last: [3]u64 = @splat(0);
+  const last_ptr: *[step]u8 = @ptrCast(&last);
+  @memcpy(last_ptr[0..data.len - idx], data[idx..]);
+
+  for (&state, &last) |*item, limb| {
+    const m = @as(u128, item.* + limb) * MUL + carry;
+    item.* = @truncate(m);
+    carry = m >> 64;
+  }
+
+  return .{ .state = state, .carry = @intCast(carry) };
+}
+
+pub fn hash(data: []const u8) u64 {
+  const rng = fromBytes(data);
+  const m = @as(u128, rng.state[0]) * MUL + rng.carry;
+  const lo: u64 = @truncate(m);
+  const hi: u64 = @intCast(m >> 64);
+  return lo ^ hi;
+}
+
 pub fn next(self: *Fmc256) u64 {
   const result = self.state[2] ^ self.carry;
   const m = @as(u128, self.state[0]) * MUL + self.carry;
