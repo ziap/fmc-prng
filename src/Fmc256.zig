@@ -7,13 +7,16 @@ pub const JUMP_SMALL = 1 << 128;
 pub const JUMP_BIG = 1 << 192;
 
 pub const JUMP_PHI = blk: {
+  const a = (MOD - 1) / 2;
+  const aa = a * a;
+
   // Initial approximation: 0.625
-  var x = MOD * 5 / 8;
+  var x = a * 5 / 8;
   var dec = false;
 
   // Newton's method iterations
   while (true) {
-    const nx = (MOD * MOD + x * x) / (MOD + 2 * x);
+    const nx = (aa + x * x) / (a + 2 * x);
     if (x == nx or (dec and nx > x)) break;
 
     dec = nx < x;
