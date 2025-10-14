@@ -34,4 +34,7 @@ pub fn main() !void {
   inline for (0..20) |byte| {
     writer.print("{x}\n", .{ Fmc256.hash(&(.{0} ** 23 ++ .{ byte })) }) catch return;
   }
+
+  const input = "the quick brown fox jumps over the lazy dog";
+  writer.print("{x}\n", .{ Fmc256.hash(input) }) catch return;
 }
