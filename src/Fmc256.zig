@@ -48,8 +48,7 @@ pub fn fromBytes(data: []const u8) Fmc256 {
     }
   };
 
-  var state: [4]u64 = @splat(0);
-  const chunks = state[0..3];
+  var chunks: [3]u64 = @splat(0);
   var carry: u64 = 0;
 
   const step = 3 * @sizeOf(u64);
@@ -61,7 +60,7 @@ pub fn fromBytes(data: []const u8) Fmc256 {
     @memcpy(chunk_ptr, data[idx..idx + step]);
     idx += step;
 
-    inline for (chunks, chunk) |*item, limb| {
+    inline for (&chunks, chunk) |*item, limb| {
       const m = @as(u128, item.*) * MUL + carry + S.safeGet(limb);
       item.* = @truncate(m);
       carry = @intCast(m >> 64);
@@ -72,14 +71,13 @@ pub fn fromBytes(data: []const u8) Fmc256 {
   const last_ptr: *[step]u8 = @ptrCast(&last);
   @memcpy(last_ptr[0..data.len - idx], data[idx..]);
 
-  inline for (chunks, last) |*item, limb| {
+  inline for (&chunks, last) |*item, limb| {
     const m = @as(u128, item.*) * MUL + carry + S.safeGet(limb);
     item.* = @truncate(m);
     carry = @intCast(m >> 64);
   }
 
-  state[3] = @intCast(carry);
-  return fromSeed(&state);
+  return .{ .state = chunks, .carry = if (carry != 0) carry else 1, };
 }
 
 pub fn next(self: *Fmc256) u64 {
