@@ -22,6 +22,16 @@ pub fn main() !void {
   jumped.jump(n);
 
   for (0..20) |_| {
-    writer.print("{x} - {x}\n", .{ rng.next(), jumped.next() }) catch return;
+    const x1 = rng.next();
+    const x2 = jumped.next();
+    if (x1 != x2) unreachable;
+    writer.print("{x} - {x}\n", .{ x1, x2 }) catch return;
+  }
+
+  buffer.flush() catch return;
+
+  writer.writeAll("Hashing test\n") catch return;
+  inline for (0..20) |byte| {
+    writer.print("{x}\n", .{ Fmc256.hash(&(.{0} ** 23 ++ .{ byte })) }) catch return;
   }
 }

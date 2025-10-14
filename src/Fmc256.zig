@@ -41,10 +41,18 @@ pub fn fromSeed(seed: *const [4]u64) Fmc256 {
 
 /// Construct an RNG from an entropy byte sequence
 pub fn fromBytes(data: []const u8) Fmc256 {
-  var state: [3]u64 = @splat(0);
-  var carry: u128 = 0;
+  const S = struct {
+    fn safeGet(x: u64) u129 {
+      const native_endian = @import("builtin").target.cpu.arch.endian();
+      return if (native_endian == .little) x else @byteSwap(x);
+    }
+  };
 
-  const step = @sizeOf(@TypeOf(state));
+  var state: [4]u64 = @splat(0);
+  const chunks = state[0..3];
+  var carry: u65 = 0;
+
+  const step = @sizeOf(@TypeOf(chunks));
   var idx: usize = 0;
 
   while (idx + step < data.len) {
@@ -53,10 +61,10 @@ pub fn fromBytes(data: []const u8) Fmc256 {
     @memcpy(chunk_ptr, data[idx..idx + step]);
     idx += step;
 
-    for (&state, &chunk) |*item, limb| {
-      const m = (@as(u128, item.* + limb)) * MUL + carry;
+    inline for (chunks, chunk) |*item, limb| {
+      const m = (@as(u129, item.*) + S.safeGet(limb)) * MUL + carry;
       item.* = @truncate(m);
-      carry = m >> 64;
+      carry = @intCast(m >> 64);
     }
   }
 
@@ -64,21 +72,14 @@ pub fn fromBytes(data: []const u8) Fmc256 {
   const last_ptr: *[step]u8 = @ptrCast(&last);
   @memcpy(last_ptr[0..data.len - idx], data[idx..]);
 
-  for (&state, &last) |*item, limb| {
-    const m = @as(u128, item.* + limb) * MUL + carry;
+  inline for (chunks, last) |*item, limb| {
+    const m = (@as(u128, item.*) + S.safeGet(limb)) * MUL + carry;
     item.* = @truncate(m);
-    carry = m >> 64;
+    carry = @intCast(m >> 64);
   }
 
-  return .{ .state = state, .carry = @intCast(carry) };
-}
-
-pub fn hash(data: []const u8) u64 {
-  const rng = fromBytes(data);
-  const m = @as(u128, rng.state[0]) * MUL + rng.carry;
-  const lo: u64 = @truncate(m);
-  const hi: u64 = @intCast(m >> 64);
-  return lo ^ hi;
+  state[3] = @intCast(carry);
+  return fromSeed(&state);
 }
 
 pub fn next(self: *Fmc256) u64 {
@@ -162,4 +163,10 @@ pub fn jump(self: *Fmc256, N: comptime_int) void {
   self.state[1] = @truncate(result >> 64);
   self.state[2] = @truncate(result >> 128);
   self.carry = @intCast(result >> 192);
+}
+
+pub fn hash(data: []const u8) u64 {
+  var rng = fromBytes(data);
+  rng.jump(JUMP_PHI);
+  return rng.state[0];
 }
