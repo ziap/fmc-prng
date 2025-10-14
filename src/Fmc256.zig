@@ -52,7 +52,7 @@ pub fn fromBytes(data: []const u8) Fmc256 {
   const chunks = state[0..3];
   var carry: u65 = 0;
 
-  const step = @sizeOf(@TypeOf(chunks));
+  const step = 3 * @sizeOf(u64);
   var idx: usize = 0;
 
   while (idx + step < data.len) {
