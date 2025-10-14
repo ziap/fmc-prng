@@ -116,8 +116,7 @@ const Montgomery = struct {
     // Perform Montgomery reduction
     const q: u256 = lo *% MOD_INV;
     const m: u256 = @intCast((@as(u512, q) * MOD) >> 256);
-    if (hi < m) return hi + (MOD - m);
-    return hi - m;
+    return if (hi < m) hi + (MOD - m) else hi - m;
   }
 
   /// Raise a number in Montgomery space to a power of an integer

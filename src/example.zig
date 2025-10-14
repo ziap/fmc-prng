@@ -21,6 +21,7 @@ pub fn main() !void {
 
   jumped.jump(n);
 
+  writer.writeAll("Jump/next test\n") catch return;
   for (0..20) |_| {
     const x1 = rng.next();
     const x2 = jumped.next();
@@ -28,9 +29,7 @@ pub fn main() !void {
     writer.print("{x} - {x}\n", .{ x1, x2 }) catch return;
   }
 
-  buffer.flush() catch return;
-
-  writer.writeAll("Hashing test\n") catch return;
+  writer.writeAll("\nHashing test\n") catch return;
   inline for (0..20) |byte| {
     writer.print("{x}\n", .{ Fmc256.hash(&(.{0} ** 23 ++ .{ byte })) }) catch return;
   }
