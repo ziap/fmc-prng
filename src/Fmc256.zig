@@ -93,76 +93,74 @@ pub fn next(self: *Fmc256) u64 {
   return result;
 }
 
-/// Montgomery space for fast modular arithmetic of 256-bit integers
-/// Code taken from: https://en.algorithmica.org/hpc/number-theory/montgomery/
-/// and adapted to 256-bit
-const Montgomery = struct {
-  /// Multiplicative inverse of MOD modulo 2^256
-  const MOD_INV: u256 = blk: {
-    var x: u256 = 1;
-    for (0..8) |_| {
-      x *%= 2 -% MOD *% x;
+pub fn jump(self: *Fmc256, n: comptime_int) void {
+  const S = struct {
+    fn power(exp: comptime_int) [4]u64 {
+      var a: u256 = 1;
+      var b = MUL << 128;
+
+      var t = exp;
+      while (t > 0) : (t >>= 1) {
+        if (t & 1 != 0) {
+          const m = @as(u512, a) * b;
+          a = @intCast(m % MOD);
+        }
+
+        const m = @as(u512, b) * b;
+        b = @intCast(m % MOD);
+      }
+
+      return .{
+        @truncate(a),
+        @truncate(a >> 64),
+        @truncate(a >> 128),
+        @intCast(a >> 192),
+      };
     }
-    break :blk x;
+
+    fn fold(state: *[4]u64, shift: *const [4]u64, limb: u64) void {
+      var ls: [4]u64 = undefined;
+      var hs: [4]u64 = undefined;
+
+      inline for (&ls, &hs, shift) |*l, *h, s| {
+        const m = @as(u128, s) * limb;
+        l.* = @truncate(m);
+        h.* = @intCast(m >> 64);
+      }
+
+      var as: [4]u128 = undefined;
+      inline for (&as, &hs, state) |*a, h, s| {
+        a.* = @as(u128, s) + h;
+      }
+
+      as[0] += ls[1];
+      as[1] += ls[2] + (as[0] >> 64);
+      as[2] += ls[3] + (as[1] >> 64) + @as(u128, ls[0]) * MUL;
+      as[3] += as[2] >> 64;
+
+      const m = @as(u128, MUL) * @as(u64, @truncate(as[0])) + as[3];
+      state[0] = @truncate(as[1]);
+      state[1] = @truncate(as[2]);
+      state[2] = @truncate(m);
+      state[3] = @intCast(m >> 64);
+    }
   };
 
-  /// Multiply two number in Montgomery space, or (rx, ry) -> rxy
-  fn multiply(x: u256, y: u256) u256 {
-    // Wide multiplication into 512-bit
-    const p = @as(u512, x) * @as(u512, y);
-    const lo: u256 = @truncate(p);
-    const hi: u256 = @intCast(p >> 256);
+  if (n >= 5) {
+    const p = comptime S.power(n - 5);
+    var state: [4]u64 = @splat(0);
+    S.fold(&state, &p, self.state[0]);
+    S.fold(&state, &p, self.state[1]);
+    S.fold(&state, &p, self.state[2]);
+    S.fold(&state, &p, self.carry);
 
-    // Perform Montgomery reduction
-    const q: u256 = lo *% MOD_INV;
-    const m: u256 = @intCast((@as(u512, q) * MOD) >> 256);
-    return if (hi < m) hi + (MOD - m) else hi - m;
-  }
-
-  /// Raise a number in Montgomery space to a power of an integer
-  fn power(x: u256, n: comptime_int) u256 {
-    var a = comptime from(1);
-    var b = x;
-
-    var t = n;
-    while (t > 0) : (t >>= 1) {
-      if (t & 1 != 0) {
-        a = multiply(a, b);
-      }
-      b = multiply(b, b);
+    self.state = state[0..3].*;
+    self.carry = state[3];
+  } else {
+    inline for (0..n) |_| {
+      self.next();
     }
-
-    return a;
   }
-
-  /// Convert a number into Montgomery space, or x -> xr
-  fn from(x: u256) u256 {
-    const r2 = comptime ((1 << 512) % MOD);
-    return multiply(x, r2);
-  }
-};
-
-/// Modular inverse of 2^64 in Montgomery space
-/// This is the multiplier of the MCG that the generator simulates
-const B_INV = Montgomery.power(Montgomery.from(1 << 64), MOD - 2);
-
-/// Equivalent to advancing the generator N times
-pub fn jump(self: *Fmc256, N: comptime_int) void {
-  const a = comptime Montgomery.power(B_INV, N);
-
-  const s = (
-    (@as(u256, self.state[0]) << 0) |
-    (@as(u256, self.state[1]) << 64) |
-    (@as(u256, self.state[2]) << 128) |
-    (@as(u256, self.carry) << 192)
-  );
-
-  const result = Montgomery.multiply(s, a);
-
-  self.state[0] = @truncate(result >> 0);
-  self.state[1] = @truncate(result >> 64);
-  self.state[2] = @truncate(result >> 128);
-  self.carry = @intCast(result >> 192);
 }
 
 pub fn hash(data: []const u8) u64 {
