@@ -163,8 +163,8 @@ pub fn jump(self: *Fmc256, n: comptime_int) void {
   }
 }
 
-pub fn hash(data: []const u8) u64 {
+pub fn hash(data: []const u8) [3]u64 {
   var rng = fromBytes(data);
   rng.jump(JUMP_PHI);
-  return rng.state[0];
+  return rng.state;
 }
