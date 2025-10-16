@@ -96,7 +96,7 @@ pub fn next(self: *Fmc256) u64 {
 pub fn jump(self: *Fmc256, n: comptime_int) void {
   const S = struct {
     fn power(exp: comptime_int) [4]u64 {
-      var a: u256 = 1;
+      var a: u256 = (1 << 320) % MOD;
       var b = MUL << 128;
 
       var t = exp;
@@ -146,21 +146,15 @@ pub fn jump(self: *Fmc256, n: comptime_int) void {
     }
   };
 
-  if (n >= 5) {
-    const p = comptime S.power(n - 5);
-    var state: [4]u64 = @splat(0);
-    S.fold(&state, &p, self.state[0]);
-    S.fold(&state, &p, self.state[1]);
-    S.fold(&state, &p, self.state[2]);
-    S.fold(&state, &p, self.carry);
+  const p = comptime S.power(n);
+  var state: [4]u64 = @splat(0);
+  S.fold(&state, &p, self.state[0]);
+  S.fold(&state, &p, self.state[1]);
+  S.fold(&state, &p, self.state[2]);
+  S.fold(&state, &p, self.carry);
 
-    self.state = state[0..3].*;
-    self.carry = state[3];
-  } else {
-    inline for (0..n) |_| {
-      self.next();
-    }
-  }
+  self.state = state[0..3].*;
+  self.carry = state[3];
 }
 
 pub fn hash(data: []const u8) [3]u64 {
