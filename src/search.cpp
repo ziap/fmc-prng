@@ -82,10 +82,10 @@ struct SpectralTest {
   }
 
   double test(const NTL::ZZ &a, double threshold) {
-    if (a >= this->mod) {
-      std::cerr << "The multiplier must be smaller than the modulus\n";
-      return 0;
-    }
+    // if (a >= this->mod) {
+    //   std::cerr << "The multiplier must be smaller than the modulus\n";
+    //   return 0;
+    // }
 
     double tnorm[dim_max - 1];
 
@@ -154,7 +154,7 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
   size_t update_step = 1 << 24;
   size_t found = 0;
 
-  NTL::ZZ b = NTL::conv<NTL::ZZ>(1) << 64;
+  NTL::ZZ b = NTL::conv<NTL::ZZ>(1) << 62;
   SpectralTest test = SpectralTest::create(b);
 
   for (size_t iteration = 0; iteration < total; ++iteration) {
@@ -163,7 +163,7 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
       std::cout << "Progress: " << iteration << '\t';
       std::cout << "Found:    " << found << '\n';
     }
-    uint64_t x = local_rng.next() | 0xc000000000000000;
+    uint64_t x = (local_rng.next() | 0xc000000000000007) ^ 0x2;
     NTL::ZZ a = NTL::conv<NTL::ZZ>(x);
     NTL::ZZ m = (a << 192) - 1;
     NTL::ZZ p = m >> 1;

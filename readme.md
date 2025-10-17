@@ -15,7 +15,7 @@ typedef struct {
   uint64_t carry;
 } Fmc256;
 
-#define MUL 0xffff1aa1c69c8d92
+#define MUL 0xfffcb1af7d963b55
 
 Fmc256 Fmc256_new(uint64_t seed[4]) {
   Fmc256 rng;

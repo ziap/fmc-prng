@@ -1,6 +1,6 @@
 const Fmc256 = @This();
 
-const MUL = 0xffff1aa1c69c8d92;
+const MUL = 0xfffcb1af7d963b55;
 const MOD = (MUL << 192) - 1;
 
 pub const JUMP_SMALL = 1 << 128;
