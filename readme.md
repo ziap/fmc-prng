@@ -7,7 +7,7 @@ multiplication result.
 ## Usage
 
 If you just want the generator, here it is in C, porting to other languages
-should be pretty trivial. See [Fmc256.zig](src/Fmc256.zig) for a Zig version.
+should be pretty trivial. See [Fmc256.zig](zig/src/Fmc256.zig) for a Zig version.
 
 ```c
 typedef struct {
