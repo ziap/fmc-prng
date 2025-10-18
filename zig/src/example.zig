@@ -22,7 +22,7 @@ pub fn main() !void {
   jumped.jump(n);
 
   writer.writeAll("Jump/next test\n") catch return;
-  for (0..20) |_| {
+  for (0..50) |_| {
     const x1 = rng.next();
     const x2 = jumped.next();
     if (x1 != x2) unreachable;
@@ -30,10 +30,11 @@ pub fn main() !void {
   }
 
   writer.writeAll("\nHashing test\n") catch return;
-  inline for (0..20) |byte| {
-    writer.print("{x}\n", .{ Fmc256.hash(&(.{0} ** 23 ++ .{ byte })) }) catch return;
+  inline for (0..50) |byte| {
+    const input = &(.{0} ** 23 ++ .{ byte });
+    writer.print("{x}\n", .{ @as(u192, @bitCast(Fmc256.hash(input))) }) catch return;
   }
 
   const input = "the quick brown fox jumps over the lazy dog";
-  writer.print("{x}\n", .{ Fmc256.hash(input) }) catch return;
+  writer.print("{x}\n", .{ @as(u192, @bitCast(Fmc256.hash(input))) }) catch return;
 }
