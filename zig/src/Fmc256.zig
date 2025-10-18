@@ -47,7 +47,7 @@ pub fn fromSeed(seed: *const [4]u64) Fmc256 {
 /// Construct an RNG from an entropy byte sequence
 pub fn fromBytes(data: []const u8) Fmc256 {
   const S = struct {
-    fn safeGet(x: u64) u64 {
+    inline fn safeGet(x: u64) u64 {
       const native_endian = comptime @import("builtin").target.cpu.arch.endian();
       return if (comptime native_endian == .little) x else @byteSwap(x);
     }
@@ -127,7 +127,7 @@ pub fn jump(self: *Fmc256, n: comptime_int) void {
   const shift = comptime S.power(n);
   var state: [4]u64 = @splat(0);
 
-  for (&self.state) |limb| {
+  inline for (&self.state) |limb| {
     var ls: [4]u64 = undefined;
     var hs: [4]u64 = undefined;
 
