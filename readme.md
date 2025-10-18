@@ -7,7 +7,7 @@ multiplication result.
 ## Usage
 
 If you just want the generator, here it is in C, porting to other languages
-should be pretty trivial. See [Fmc256.zig](zig/src/Fmc256.zig) for a Zig version.
+should be pretty trivial.
 
 ```c
 typedef struct {
@@ -33,6 +33,39 @@ uint64_t Fmc256_next(Fmc256 *rng) {
   rng->carry = m >> 64;
   return result;
 }
+```
+
+### Zig version
+
+Other than the minimal C version above, there is also the Zig version provided
+[here](src/Fmc256.zig). It has a richer seeding API:
+
+```zig
+var rng1 = Fmc256.fromBytes(&.{ 42 });
+var rng2 = Fmc256.fromBytes("an arbitrarily long string");
+
+// Use the operating system's entropy
+var rng3 = Fmc256.fromSeed(seed: {
+  var seed: [4]u64 = undefined;
+  try std.posix.getrandom(@ptrCast(&seed));
+  break :seed seed;
+});
+```
+
+And supports efficient jump-ahead:
+
+```zig
+rng.jump(.steps(n));          // runtime jump (O(log n))
+rng.jump(comptime .steps(n)); // compile-time jump (O(1) at runtime)
+
+// Creating parallel streams, a default jump is provided for this purpose
+const rng1 = rng;
+rng.jump(.default);
+const rng2 = rng;
+rng.jump(.default);
+
+try std.Thread.spawn(.{}, work1, .{ args1, rng1 });
+try std.Thread.spawn(.{}, work2, .{ args2, rng2 });
 ```
 
 The rest of this repository contains code for configuring and testing the PRNG.
