@@ -7,7 +7,7 @@ pub fn main() !void {
   defer buffer.flush() catch {};
   var writer = buffer.writer();
 
-  const rng = Fmc256.fromBytes(&.{ 42 });
+  var rng = Fmc256.fromBytes(&.{ 42 });
   rng.jump(.default);
 
   const n = 1_000_000;

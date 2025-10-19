@@ -66,7 +66,7 @@ pub fn fromBytes(data: []const u8) Fmc256 {
 }
 
 /// Generate the next 64-bit output from the generator and advance state by one.
-pub fn next(self: *Fmc256) u64 {
+pub inline fn next(self: *Fmc256) u64 {
   const result = self.state[2] ^ self.state[3];
   const m = @as(u128, self.state[0]) * MUL + self.state[3];
   self.state[0] = self.state[1];
@@ -82,7 +82,7 @@ pub const Jump = struct {
 
   data: [4]u64,
 
-  /// Montogomery style multiple-reduce routine, computes x*y*R^-1, R=2^320
+  /// Montogomery style multiply-reduce routine, computes x*y*R^-1, R=2^320
   fn multiply(x: *const [4]u64, y: *const [4]u64) [4]u64 {
     var state: [4]u64 = @splat(0);
 
@@ -127,12 +127,15 @@ pub const Jump = struct {
   }
 
   /// Compute the jump multiplier multiplied by R that corresponds to advancing
-  /// the generator / by 'n' steps in O(log n).
+  /// the generator by 'n' steps in O(log n).
   pub fn steps(n: u256) Jump {
+    const r = (1 << 320) % MOD;
+    const m = MUL << 128;
+
     if (@inComptime()) {
       // Use explicit mod, so only initialize with R instead of 1
-      var a: u256 = (1 << 320) % MOD;
-      var b: u256 = MUL << 128;
+      var a: u256 = r;
+      var b: u256 = m;
 
       var t = n;
       while (t > 0) : (t >>= 1) {
@@ -145,8 +148,8 @@ pub const Jump = struct {
 
     // Use the multiply-reduction routine, so both the identity and base needs
     // to be multiplied by R
-    var a = comptime toParts((1 << 320) % MOD);
-    var b = comptime toParts((MUL << (128 + 320)) % MOD);
+    var a = comptime toParts(r);
+    var b = comptime toParts(m * r % MOD);
 
     var t = n;
     while (t > 0) : (t >>= 1) {
@@ -181,6 +184,6 @@ pub const Jump = struct {
 };
 
 /// Advance the generator by the specified `Jump` multiplier.  
-pub fn jump(self: *Fmc256, n: Jump) void {
+pub inline fn jump(self: *Fmc256, n: Jump) void {
   self.state = Jump.multiply(&self.state, &n.data);
 }

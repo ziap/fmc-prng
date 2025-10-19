@@ -102,6 +102,7 @@ Fmc256 is only slower than small period generators (period less than 2^128).
 
 ## TODO
 
+- [ ] JavaScript port
 - [ ] 128-bit state, 64-bit output variant
 - [ ] 128-bit state, 32-bit output variant
 - [ ] Statistical quality assessment
