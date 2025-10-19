@@ -7,7 +7,7 @@ pub fn main() !void {
   defer buffer.flush() catch {};
   var writer = buffer.writer();
 
-  var rng = Fmc256.fromBytes(&.{ 42 });
+  var rng = Fmc256.fromBytes(&.{});
   rng.jump(.default);
 
   const n = 1_000_000;
@@ -35,4 +35,8 @@ pub fn main() !void {
     if (x1 != x2) unreachable;
     writer.print("{x:0>16} - {x:0>16}\n", .{ x1, x2 }) catch return;
   }
+
+  var buf: [1024]u8 = undefined;
+  rng1.fill(&buf);
+  writer.print("{x}\n", .{ &buf }) catch return;
 }

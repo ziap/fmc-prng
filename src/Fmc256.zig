@@ -1,6 +1,7 @@
 const Fmc256 = @This();
 
 const MUL = 0xfffcb1af7d963b55;
+const endian = @import("builtin").target.cpu.arch.endian();
 
 state: [4]u64,
 
@@ -32,7 +33,6 @@ pub fn fromBytes(data: []const u8) Fmc256 {
       var carry = state[3];
       inline for (state[0..3], chunk) |*item, x| {
         // Ensure determinism across endianness
-        const endian = comptime @import("builtin").target.cpu.arch.endian();
         const limb = if (comptime endian == .little) x else @byteSwap(x);
 
         const m = @as(u128, item.*) * MUL + carry + limb;
@@ -47,12 +47,11 @@ pub fn fromBytes(data: []const u8) Fmc256 {
   const step = 3 * @sizeOf(u64);
   var idx: usize = 0;
 
-  while (idx + step < data.len) {
+  while (idx + step < data.len) : (idx += step) {
     var chunk: [3]u64 = undefined;
     const chunk_ptr: *[step]u8 = @ptrCast(&chunk);
     @memcpy(chunk_ptr, data[idx..idx + step]);
     S.mix(&state, &chunk);
-    idx += step;
   }
 
   var last: [3]u64 = @splat(0);
@@ -65,7 +64,7 @@ pub fn fromBytes(data: []const u8) Fmc256 {
   return .{ .state = state };
 }
 
-/// Generate the next 64-bit output from the generator and advance state by one.
+/// Generate the next 64-bit output from the generator and advance state by one
 pub inline fn next(self: *Fmc256) u64 {
   const result = self.state[2] ^ self.state[3];
   const m = @as(u128, self.state[0]) * MUL + self.state[3];
@@ -127,7 +126,7 @@ pub const Jump = struct {
   }
 
   /// Compute the jump multiplier multiplied by R that corresponds to advancing
-  /// the generator by 'n' steps in O(log n).
+  /// the generator by 'n' steps in O(log n)
   pub fn steps(n: u256) Jump {
     const r = (1 << 320) % MOD;
     const m = MUL << 128;
@@ -183,7 +182,60 @@ pub const Jump = struct {
   };
 };
 
-/// Advance the generator by the specified `Jump` multiplier.  
+/// Advance the generator by the specified `Jump` multiplier
 pub inline fn jump(self: *Fmc256, n: Jump) void {
   self.state = Jump.multiply(&self.state, &n.data);
+}
+
+/// Fill a buffer with values randomly generated from the generator
+pub fn fill(self: *Fmc256, buffer: []u8) void {
+  const S = struct {
+    fn getChunk(rng: *Fmc256) [3]u64 { 
+      var result: [3]u64 = undefined;
+      var carry = rng.state[3];
+      inline for (0..3, &result, rng.state[0..3]) |idx, *item, *limb| {
+        item.* = rng.state[comptime (idx + 2) % 3] ^ carry;
+        const m = @as(u128, limb.*) * MUL + carry;
+        limb.* = @truncate(m);
+        carry = @intCast(m >> 64);
+      }
+      rng.state[3] = carry;
+
+      if (comptime endian != .little) {
+        for (&result) |*item| {
+          item.* = @byteSwap(item.*);
+        }
+      }
+      return result;
+    }
+  };
+
+  var idx: usize = 0;
+  const step1 = @sizeOf(u64);
+  const step3 = 3 * step1;
+
+  while (idx + step3 <= buffer.len) : (idx += step3) {
+    const chunk = S.getChunk(self);
+    const chunk_ptr: *const [step3]u8 = @ptrCast(&chunk);
+    @memcpy(buffer[idx..idx + step3], chunk_ptr);
+  }
+
+  inline for (0..2) |_| {
+    if (idx + step1 <= buffer.len) {
+      const n = self.next();
+      const chunk = if (comptime endian == .little) n else @byteSwap(n);
+      const chunk_ptr: *const [step1]u8 = @ptrCast(&chunk);
+      @memcpy(buffer[idx..idx + step1], chunk_ptr);
+      idx += step1;
+    }
+  }
+
+  if (idx + step1 <= buffer.len) unreachable;
+
+  if (idx < buffer.len) {
+    const n = self.next();
+    const chunk = if (comptime endian == .little) n else @byteSwap(n);
+    const chunk_ptr: *const [step1]u8 = @ptrCast(&chunk);
+    @memcpy(buffer[idx..], chunk_ptr[0..buffer.len - idx]);
+  }
 }
