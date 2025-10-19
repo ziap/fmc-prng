@@ -1,4 +1,4 @@
-const Mwc256x = @This();
+const Fmc256 = @This();
 
 const MUL = 0xfffcb1af7d963b55;
 const endian = @import("builtin").target.cpu.arch.endian();
@@ -6,7 +6,7 @@ const endian = @import("builtin").target.cpu.arch.endian();
 state: [4]u64,
 
 /// Constructs an RNG from a 256-bit seed, maps them into the algebraic ring
-pub fn fromSeed(seed: [4]u64) Mwc256x {
+pub fn fromSeed(seed: [4]u64) Fmc256 {
   var state: [4]u64 = undefined;
   var carry = seed[3];
   for (state[0..3], seed[0..3]) |*item, limb| {
@@ -19,7 +19,7 @@ pub fn fromSeed(seed: [4]u64) Mwc256x {
   // Ensure non-zero state
   const v: u256 = @bitCast(state);
   if (v == 0) state[0] = 1;
-  var result: Mwc256x = .{ .state = state };
+  var result: Fmc256 = .{ .state = state };
 
   // Ensure state < MOD
   _ = result.next();
@@ -27,37 +27,67 @@ pub fn fromSeed(seed: [4]u64) Mwc256x {
 }
 
 /// Construct an RNG from an arbitrary length entropy sequence
-pub fn fromBytes(data: []const u8) Mwc256x {
+pub fn fromBytes(data: []const u8) Fmc256 {
   const S = struct {
-    inline fn mix(state: *[4]u64, chunk: *const [3]u64) void {
-      var carry = state[3];
-      inline for (state[0..3], chunk) |*item, x| {
-        // Ensure determinism across endianness
-        const limb = if (comptime endian == .little) x else @byteSwap(x);
-
-        const m = @as(u128, item.*) * MUL + carry + limb;
-        item.* = @truncate(m);
-        carry = @intCast(m >> 64);
-      }
-      state[3] = carry;
+    inline fn mix(state: *[4]u64, chunk: u64) void {
+      const m = @as(u128, state[0]) * MUL + state[3] + chunk;
+      state[0] = state[1];
+      state[1] = state[2];
+      state[2] = @truncate(m);
+      state[3] = @intCast(m >> 64);
     }
   };
 
   var state: [4]u64 = @splat(0);
-  const step = 3 * @sizeOf(u64);
+  const step1 = @sizeOf(u64);
+  const step3 = 3 * step1;
   var idx: usize = 0;
 
-  while (idx + step < data.len) : (idx += step) {
+  while (idx + step3 <= data.len) : (idx += step3) {
     var chunk: [3]u64 = undefined;
-    const chunk_ptr: *[step]u8 = @ptrCast(&chunk);
-    @memcpy(chunk_ptr, data[idx..idx + step]);
-    S.mix(&state, &chunk);
+    const chunk_ptr: *[step3]u8 = @ptrCast(&chunk);
+    @memcpy(chunk_ptr, data[idx..idx + step3]);
+
+    var carry = state[3];
+    inline for (state[0..3], &chunk) |*item, x| {
+      const limb = if (comptime endian == .little) x else @byteSwap(x);
+
+      const m = @as(u128, item.*) * MUL + carry + limb;
+      item.* = @truncate(m);
+      carry = @intCast(m >> 64);
+    }
+    state[3] = carry;
   }
 
-  var last: [3]u64 = @splat(0);
-  const last_ptr: *[step]u8 = @ptrCast(&last);
-  @memcpy(last_ptr[0..data.len - idx], data[idx..]);
-  S.mix(&state, &last);
+  blk: switch ((data.len - idx) / step1) {
+    inline 1...2 => |x| {
+      var chunk: u64 = undefined;
+      const chunk_ptr: *[step1]u8 = @ptrCast(&chunk);
+      @memcpy(chunk_ptr, data[idx..idx + step1]);
+      if (comptime endian != .little) chunk = @byteSwap(chunk);
+
+      S.mix(&state, chunk);
+      idx += step1;
+      continue :blk comptime x - 1;
+    },
+    inline 0 => {},
+    else => unreachable,
+  }
+
+  if (idx < data.len) {
+    var chunk: u64 = 0;
+    blk: switch (data.len - idx) {
+      inline 1...(step1 - 1) => |x| {
+        const nx = comptime x - 1;
+        chunk = (chunk << 8) | data[idx + nx];
+        continue :blk nx;
+      },
+      inline 0 => {},
+      else => unreachable,
+    }
+
+    S.mix(&state, chunk);
+  }
 
   const v: u256 = @bitCast(state);
   if (v == 0) state[0] = 1;
@@ -65,7 +95,7 @@ pub fn fromBytes(data: []const u8) Mwc256x {
 }
 
 /// Generate the next 64-bit output from the generator and advance state by one
-pub inline fn next(self: *Mwc256x) u64 {
+pub inline fn next(self: *Fmc256) u64 {
   const result = self.state[2] ^ self.state[3];
   const m = @as(u128, self.state[0]) * MUL + self.state[3];
   self.state[0] = self.state[1];
@@ -183,60 +213,56 @@ pub const Jump = struct {
 };
 
 /// Advance the generator by the specified `Jump` multiplier
-pub inline fn jump(self: *Mwc256x, n: Jump) void {
+pub inline fn jump(self: *Fmc256, n: Jump) void {
   self.state = Jump.multiply(&self.state, &n.data);
 }
 
 /// Fill a buffer with values randomly generated from the generator
-pub fn fill(self: *Mwc256x, buffer: []u8) void {
-  const S = struct {
-    fn getChunk(rng: *Mwc256x) [3]u64 { 
-      var result: [3]u64 = undefined;
-      var carry = rng.state[3];
-      inline for (0..3, &result, rng.state[0..3]) |idx, *item, *limb| {
-        item.* = rng.state[comptime (idx + 2) % 3] ^ carry;
-        const m = @as(u128, limb.*) * MUL + carry;
-        limb.* = @truncate(m);
-        carry = @intCast(m >> 64);
-      }
-      rng.state[3] = carry;
-
-      if (comptime endian != .little) {
-        for (&result) |*item| {
-          item.* = @byteSwap(item.*);
-        }
-      }
-      return result;
-    }
-  };
-
+pub fn fill(self: *Fmc256, buffer: []u8) void {
   var idx: usize = 0;
   const step1 = @sizeOf(u64);
   const step3 = 3 * step1;
 
   while (idx + step3 <= buffer.len) : (idx += step3) {
-    const chunk = S.getChunk(self);
+    var chunk: [3]u64 = undefined;
+    var carry = self.state[3];
+    inline for (0..3, &chunk, self.state[0..3]) |i, *item, *limb| {
+      item.* = self.state[comptime (i + 2) % 3] ^ carry;
+      const m = @as(u128, limb.*) * MUL + carry;
+      limb.* = @truncate(m);
+      carry = @intCast(m >> 64);
+    }
+    self.state[3] = carry;
+
+    if (comptime endian != .little) {
+      for (&chunk) |*item| {
+        item.* = @byteSwap(item.*);
+      }
+    }
     const chunk_ptr: *const [step3]u8 = @ptrCast(&chunk);
     @memcpy(buffer[idx..idx + step3], chunk_ptr);
   }
 
-  inline for (0..2) |_| {
-    if (idx + step1 <= buffer.len) {
+  blk: switch ((buffer.len - idx) / step1) {
+    inline 1...2 => |x| {
       const n = self.next();
       const chunk = if (comptime endian == .little) n else @byteSwap(n);
       const chunk_ptr: *const [step1]u8 = @ptrCast(&chunk);
       @memcpy(buffer[idx..idx + step1], chunk_ptr);
       idx += step1;
-    }
+      continue :blk comptime x - 1;
+    },
+    inline 0 => {},
+    else => unreachable,
   }
 
   if (idx < buffer.len) {
     const n = self.next();
-    last: switch (buffer.len - idx) {
+    blk: switch (buffer.len - idx) {
       inline 1...(step1 - 1) => |x| {
         const nx = comptime x - 1;
-        buffer[idx + nx] = @truncate(n >> (comptime 8 * nx));
-        continue :last nx;
+        buffer[idx + nx] = @truncate(n >> comptime (8 * nx));
+        continue :blk nx;
       },
       inline 0 => {},
       else => unreachable,
