@@ -59,7 +59,7 @@ pub fn fromBytes(data: []const u8) Fmc256 {
     state[3] = carry;
   }
 
-  blk: switch ((data.len - idx) / step1) {
+  duff: switch ((data.len - idx) / step1) {
     inline 1...2 => |x| {
       var chunk: u64 = undefined;
       const chunk_ptr: *[step1]u8 = @ptrCast(&chunk);
@@ -68,7 +68,7 @@ pub fn fromBytes(data: []const u8) Fmc256 {
 
       S.mix(&state, chunk);
       idx += step1;
-      continue :blk comptime x - 1;
+      continue :duff comptime x - 1;
     },
     inline 0 => {},
     else => unreachable,
@@ -76,11 +76,11 @@ pub fn fromBytes(data: []const u8) Fmc256 {
 
   if (idx < data.len) {
     var chunk: u64 = 0;
-    blk: switch (data.len - idx) {
+    duff: switch (data.len - idx) {
       inline 1...(step1 - 1) => |x| {
         const nx = comptime x - 1;
         chunk = (chunk << 8) | data[idx + nx];
-        continue :blk nx;
+        continue :duff nx;
       },
       inline 0 => {},
       else => unreachable,
@@ -243,14 +243,14 @@ pub fn fill(self: *Fmc256, buffer: []u8) void {
     @memcpy(buffer[idx..idx + step3], chunk_ptr);
   }
 
-  blk: switch ((buffer.len - idx) / step1) {
+  duff: switch ((buffer.len - idx) / step1) {
     inline 1...2 => |x| {
       const n = self.next();
       const chunk = if (comptime endian == .little) n else @byteSwap(n);
       const chunk_ptr: *const [step1]u8 = @ptrCast(&chunk);
       @memcpy(buffer[idx..idx + step1], chunk_ptr);
       idx += step1;
-      continue :blk comptime x - 1;
+      continue :duff comptime x - 1;
     },
     inline 0 => {},
     else => unreachable,
@@ -258,11 +258,11 @@ pub fn fill(self: *Fmc256, buffer: []u8) void {
 
   if (idx < buffer.len) {
     const n = self.next();
-    blk: switch (buffer.len - idx) {
+    duff: switch (buffer.len - idx) {
       inline 1...(step1 - 1) => |x| {
         const nx = comptime x - 1;
         buffer[idx + nx] = @truncate(n >> comptime (8 * nx));
-        continue :blk nx;
+        continue :duff nx;
       },
       inline 0 => {},
       else => unreachable,

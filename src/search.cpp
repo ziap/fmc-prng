@@ -3,6 +3,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <optional>
 #include <vector>
 
 #include <NTL/LLL.h>
@@ -81,20 +82,12 @@ struct SpectralTest {
     return test;
   }
 
-  double test(const NTL::ZZ &a, double threshold) {
-    // if (a >= this->mod) {
-    //   std::cerr << "The multiplier must be smaller than the modulus\n";
-    //   return 0;
-    // }
-
+  std::optional<double> test(const NTL::ZZ &a, NTL::mat_ZZ &mat) {
     double tnorm[dim_max - 1];
 
     for(int d = 2; d <= dim_max; d++) {
       tnorm[d - 2] = NTL::to_double(NTL::to_RR(1) / (NTL::pow(NTL::to_RR(norm[d - 2]), NTL::to_RR(1./2)) * NTL::pow(NTL::to_RR(mod), NTL::to_RR(1) / NTL::to_RR(d))));
     }
-
-    NTL::mat_ZZ mat;
-    mat.SetDims(this->max_dim, this->max_dim);
 
     double harm_norm = 0, min_fm = std::numeric_limits<double>::infinity(), harm_score = 0, cur_fm[dim_max];
 
@@ -119,7 +112,7 @@ struct SpectralTest {
       harm_norm += 1. / (d - 1);
     }
 
-    if (min_fm < threshold) return 0;
+    if (min_fm < 0.5) return std::nullopt;
     return harm_score / harm_norm;
   }
 };
@@ -146,7 +139,8 @@ struct Splitmix {
 
 struct Candidate {
   uint64_t multiplier;
-  double spectral_score;
+  double spectral_b;
+  double spectral_m;
 };
 
 std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total) {
@@ -154,8 +148,10 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
   size_t update_step = 1 << 24;
   size_t found = 0;
 
-  NTL::ZZ b = NTL::conv<NTL::ZZ>(1) << 62;
-  SpectralTest test = SpectralTest::create(b);
+  NTL::ZZ b = NTL::conv<NTL::ZZ>(1) << 64;
+  SpectralTest test_b = SpectralTest::create(b / 4);
+
+  NTL::mat_ZZ mat;
 
   for (size_t iteration = 0; iteration < total; ++iteration) {
     if ((iteration + 1) % update_step == 0) {
@@ -166,16 +162,20 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
     uint64_t x = (local_rng.next() | 0xc000000000000007) ^ 0x2;
     NTL::ZZ a = NTL::conv<NTL::ZZ>(x);
     NTL::ZZ m = (a << 192) - 1;
-    NTL::ZZ p = m >> 1;
+    NTL::ZZ p = m / 2;
 
     if (!NTL::ProbPrime(m)) continue;
     if (!NTL::ProbPrime(p)) continue;
 
-    double score = test.test(a, 0.5);
-    if (score == 0) continue;
+    std::optional<double> score_b = test_b.test(a, mat);
+    if (!score_b.has_value()) continue;
+
+    SpectralTest test_m = SpectralTest::create(p);
+    std::optional<double> score_m = test_m.test(NTL::PowerMod(b, 6, p), mat);
+    if (!score_m.has_value()) continue;
 
     ++found;
-    result.emplace_back(Candidate { x, score });
+    result.emplace_back(Candidate { x, *score_b, *score_m });
   }
 
   return result;
@@ -205,18 +205,18 @@ int main(void) {
   }
 
   std::ofstream fout("candidates.csv");
-  fout << "Multiplier,Spectral score\n";
+  fout << "Multiplier,Spectral mod B,Spectral mod M\n";
 
   std::vector main_result = search(rng, 0, remaining_work);
 
   for (size_t i = 0; i < thread_count; ++i) {
     for (const Candidate &candidate : threads[i].get()) {
-      fout << hex(candidate.multiplier) << ',' << candidate.spectral_score << '\n';
+      fout << hex(candidate.multiplier) << ',' << candidate.spectral_b << ',' << candidate.spectral_m << '\n';
     }
   }
 
   for (const Candidate &candidate : main_result) {
-    fout << hex(candidate.multiplier) << ',' << candidate.spectral_score << '\n';
+    fout << hex(candidate.multiplier) << ',' << candidate.spectral_b << ',' << candidate.spectral_m << '\n';
   }
 
   return 0;

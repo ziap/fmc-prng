@@ -9,13 +9,14 @@
     system = "x86_64-linux";
     pkgs = import nixpkgs { inherit system; };
 
-    zig-filename = "zig-linux-x86_64-0.14.0";
+    zig-version = "0.14.0";
+    zig-filename = "zig-linux-x86_64-${zig-version}";
     zig-custom = pkgs.stdenv.mkDerivation {
       pname = "zig-custom";
-      version = "0.14.0";
+      version = zig-version;
 
       src = pkgs.fetchurl {
-        url = "https://ziglang.org/builds/${zig-filename}.tar.xz";
+        url = "https://ziglang.org/download/${zig-version}/${zig-filename}.tar.xz";
         sha256 = "Rz7CaAYTPPTRkYyvGkEPhAOhPZeXJqkEW0IbaFAxqYI=";
       };
 
