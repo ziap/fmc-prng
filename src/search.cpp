@@ -159,7 +159,7 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
       std::cout << "Progress: " << iteration << '\t';
       std::cout << "Found:    " << found << '\n';
     }
-    uint64_t x = (local_rng.next() | 0xc000000000000007) ^ 0x2;
+    uint64_t x = (local_rng.next() | 0xfff0000000000007) ^ 0x2;
     NTL::ZZ a = NTL::conv<NTL::ZZ>(x);
     NTL::ZZ m = (a << 192) - 1;
     NTL::ZZ p = m / 2;
