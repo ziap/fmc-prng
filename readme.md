@@ -79,7 +79,7 @@ performance. But here's a rough estimation of how `Fmc256` performs against
 some other popular PRNG.
 
 Test environment:
-- Zig version: 0.14.0
+- Zig version: 0.16.0
 - OS: Linux 6.6.80, NixOS, 24.11 (Vicuna)
 - CPU: AMD Ryzen 7 5800U
 

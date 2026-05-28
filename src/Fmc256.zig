@@ -6,20 +6,18 @@ const endian = @import("builtin").target.cpu.arch.endian();
 state: [4]u64,
 
 /// Constructs an RNG from a 256-bit seed, maps them into the algebraic ring
-pub fn fromSeed(seed: [4]u64) Fmc256 {
-  var state: [4]u64 = undefined;
-  var carry = seed[3];
-  for (state[0..3], seed[0..3]) |*item, limb| {
+pub fn fromSeed(seed: *const [4]u64) Fmc256 {
+  // Ensure non-zero state
+  const v: u256 = @bitCast(seed);
+  var carry = if (v != 0) seed[3] else 1;
+
+  var result: Fmc256 = undefined;
+  for (result.state[0..3], seed[0..3]) |*item, limb| {
     const m = @as(u128, limb) * MUL + carry;
     item.* = @truncate(m);
     carry = @intCast(m >> 64);
   }
-  state[3] = carry;
-
-  // Ensure non-zero state
-  const v: u256 = @bitCast(state);
-  if (v == 0) state[0] = 1;
-  var result: Fmc256 = .{ .state = state };
+  result.state[3] = carry;
 
   // Ensure state < MOD
   _ = result.next();

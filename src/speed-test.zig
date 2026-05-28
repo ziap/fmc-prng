@@ -160,16 +160,12 @@ fn hammingWeight64(rng: anytype, count: u64) f64 {
   return chi_squared;
 }
 
-pub fn main() !void {
-  var buffer = std.io.bufferedWriter(std.io.getStdOut().writer());
-  defer buffer.flush() catch {};
-  var writer = buffer.writer();
+pub fn main(init: std.process.Init) !void {
+  var buffer: [4096]u8 = undefined;
+  var stdout: std.Io.File.Writer = .init(.stdout(), init.io, &buffer);
+  const writer = &stdout.interface;
 
-  var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-  defer arena.deinit();
-  const allocator = arena.allocator();
-
-  const args = try std.process.argsAlloc(allocator);
+  const args = try init.minimal.args.toSlice(init.arena.allocator());
 
   const n = blk: {
     const default: usize = 1 << 32;
@@ -187,7 +183,7 @@ pub fn main() !void {
 
   inline for (testNames, tests64) |testName, test64| {
     writer.writeAll("Running test " ++ testName ++ "\n") catch return;
-    buffer.flush() catch return;
+    writer.flush() catch return;
     inline for (generators) |Rng| {
       var rng: Rng = undefined;
 
@@ -199,19 +195,20 @@ pub fn main() !void {
         @memcpy(rng_ptr, entropy_pool[0..rng_size]);
       }
 
-      var timer = try std.time.Timer.start();
+      const start_time = std.Io.Timestamp.now(init.io, .awake);
       const result = test64(&rng, n);
-      const elapsed: f64 = @floatFromInt(timer.read());
+      const done_time = std.Io.Timestamp.now(init.io, .awake);
+      const duration = start_time.durationTo(done_time);
 
       writer.print("{} - {d} - {d}ms\n", .{
         Rng,
         result,
-        elapsed / std.time.ns_per_ms
+        duration.toMilliseconds(),
       }) catch return;
-      buffer.flush() catch return;
+      writer.flush() catch return;
     }
 
     writer.writeAll("-" ** 80 ++ "\n") catch return;
-    buffer.flush() catch return;
+    writer.flush() catch return;
   }
 }

@@ -2,10 +2,10 @@ const Fmc256 = @import("Fmc256.zig");
 
 const std = @import("std");
 
-pub fn main() !void {
-  var buffer = std.io.bufferedWriter(std.io.getStdOut().writer());
-  defer buffer.flush() catch {};
-  var writer = buffer.writer();
+pub fn main(init: std.process.Init) void {
+  var buffer: [4096]u8 = undefined;
+  var stdout: std.Io.File.Writer = .init(.stdout(), init.io, &buffer);
+  const writer = &stdout.interface;
 
   var rng = Fmc256.fromBytes(&.{});
   rng.jump(.default);
@@ -35,4 +35,6 @@ pub fn main() !void {
     if (x1 != x2) unreachable;
     writer.print("{x:0>16} - {x:0>16}\n", .{ x1, x2 }) catch return;
   }
+
+  writer.flush() catch return;
 }

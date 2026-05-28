@@ -5,21 +5,25 @@ pub fn build(b: *std.Build) void {
   const optimize = b.standardOptimizeOption(.{});
   const strip = optimize == .ReleaseFast or optimize == .ReleaseSmall;
 
-  const search = b.addExecutable(.{
-    .name = "search",
+  const search_module = b.createModule(.{
     .target = target,
     .optimize = optimize,
     .strip = strip,
+    .link_libcpp = true,
   });
 
-  search.addCSourceFiles(.{
+  search_module.addCSourceFiles(.{
     .files = &.{ "src/search.cpp" },
     .flags = &.{ "-Werror", "-Wall", "-Wextra", "-std=c++17", "-pedantic" },
   });
 
-  search.linkLibCpp();
-  search.linkSystemLibrary("gmp");
-  search.linkSystemLibrary("ntl");
+  search_module.linkSystemLibrary("gmp", .{});
+  search_module.linkSystemLibrary("ntl", .{});
+
+  const search = b.addExecutable(.{
+    .name = "search",
+    .root_module = search_module,
+  });
 
   b.installArtifact(search);
 
@@ -33,10 +37,12 @@ pub fn build(b: *std.Build) void {
 
   const example = b.addExecutable(.{
     .name = "example",
-    .root_source_file = b.path("src/example.zig"),
-    .target = target,
-    .optimize = optimize,
-    .strip = strip,
+    .root_module = b.createModule(.{
+      .root_source_file = b.path("src/example.zig"),
+      .target = target,
+      .optimize = optimize,
+      .strip = strip,
+    }),
   });
 
   b.installArtifact(example);
@@ -51,10 +57,12 @@ pub fn build(b: *std.Build) void {
 
   const speed_test = b.addExecutable(.{
     .name = "speed_test",
-    .root_source_file = b.path("src/speed-test.zig"),
-    .target = target,
-    .optimize = optimize,
-    .strip = strip,
+    .root_module = b.createModule(.{
+      .root_source_file = b.path("src/speed-test.zig"),
+      .target = target,
+      .optimize = optimize,
+      .strip = strip,
+    }),
   });
 
   b.installArtifact(speed_test);
