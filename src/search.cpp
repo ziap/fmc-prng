@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <fstream>
 #include <future>
@@ -73,6 +74,8 @@ struct SpectralTest {
     4.0,
   };
 
+  struct Result { double harm_score; double min_fm; };
+
   int max_dim;
   NTL::ZZ mod;
 
@@ -82,7 +85,7 @@ struct SpectralTest {
     return test;
   }
 
-  std::optional<double> test(const NTL::ZZ &a, NTL::mat_ZZ &mat) {
+  std::optional<Result> test(const NTL::ZZ &a, NTL::mat_ZZ &mat) {
     double tnorm[dim_max - 1];
 
     for(int d = 2; d <= dim_max; d++) {
@@ -113,53 +116,48 @@ struct SpectralTest {
     }
 
     if (min_fm < 0.5) return std::nullopt;
-    return harm_score / harm_norm;
+    return Result { harm_score / harm_norm, min_fm };
   }
 };
 
-struct Splitmix {
-  uint64_t state;
-  uint64_t gamma;
-
-  static Splitmix init(uint64_t seed) {
-    return Splitmix { seed, 0x9e3779b97f4a7c15 };
-  }
-
-  uint64_t next() {
-    uint64_t z = (this->state += this->gamma);
-    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
-    z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
-    return z ^ (z >> 31);
-  }
-
-  Splitmix split() {
-    return Splitmix { this->next(), this->next() | 1 };
-  }
-};
+uint64_t splitmix(uint64_t z) {
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
+  return z ^ (z >> 31);
+}
 
 struct Candidate {
   uint64_t multiplier;
   double spectral_b;
+  double min_fm_b;
   double spectral_m;
+  double min_fm_m;
 };
 
-std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total) {
+std::vector<Candidate> search(std::atomic<size_t> &counter, size_t total, size_t thread_id, uint64_t seed) {
   std::vector<Candidate> result;
   size_t update_step = 1 << 24;
   size_t found = 0;
+  size_t local_iter = 0;
 
   NTL::ZZ b = NTL::conv<NTL::ZZ>(1) << 64;
   SpectralTest test_b = SpectralTest::create(b / 4);
 
   NTL::mat_ZZ mat;
 
-  for (size_t iteration = 0; iteration < total; ++iteration) {
-    if ((iteration + 1) % update_step == 0) {
+  while (true) {
+    size_t i = counter.fetch_add(1, std::memory_order_relaxed);
+    if (i >= total) break;
+
+    ++local_iter;
+    if (local_iter % update_step == 0) {
       std::cout << "[Thread #" << thread_id << "]:\t";
-      std::cout << "Progress: " << iteration << '\t';
+      std::cout << "Progress: " << local_iter << '\t';
       std::cout << "Found:    " << found << '\n';
     }
-    uint64_t x = (local_rng.next() | 0xfff0000000000007) ^ 0x2;
+
+    uint64_t state = seed + i * 0x9e3779b97f4a7c15;
+    uint64_t x = (splitmix(state) | 0xfff0000000000007) ^ 0x2;
     NTL::ZZ a = NTL::conv<NTL::ZZ>(x);
     NTL::ZZ m = (a << 192) - 1;
     NTL::ZZ p = m / 2;
@@ -167,15 +165,15 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
     if (!NTL::ProbPrime(m)) continue;
     if (!NTL::ProbPrime(p)) continue;
 
-    std::optional<double> score_b = test_b.test(a, mat);
+    std::optional<SpectralTest::Result> score_b = test_b.test(a, mat);
     if (!score_b.has_value()) continue;
 
     SpectralTest test_m = SpectralTest::create(p);
-    std::optional<double> score_m = test_m.test(NTL::PowerMod(b, 6, p), mat);
+    std::optional<SpectralTest::Result> score_m = test_m.test(NTL::PowerMod(b, 6, p), mat);
     if (!score_m.has_value()) continue;
 
     ++found;
-    result.emplace_back(Candidate { x, *score_b, *score_m });
+    result.emplace_back(Candidate { x, score_b->harm_score, score_b->min_fm, score_m->harm_score, score_m->min_fm });
   }
 
   return result;
@@ -186,37 +184,31 @@ std::vector<Candidate> search(Splitmix local_rng, size_t thread_id, size_t total
 int main(void) {
   size_t thread_count = std::thread::hardware_concurrency() - 1;
   size_t total = 4294967296;
-  size_t work_per_thread = total / (thread_count + 1);
-  size_t remaining_work = total - thread_count * work_per_thread;
 
-  NTL::SetSeed(NTL::conv<NTL::ZZ>(42));
+  uint64_t seed = splitmix(42);
 
-  NTL::ZZ seed;
-  NTL::RandomBits(seed, 64);
-  
-  Splitmix rng = Splitmix::init(NTL::conv<uint64_t>(seed));
+  std::atomic<size_t> counter = 0;
 
   using Result = std::future<std::vector<Candidate>>;
   std::unique_ptr<Result[]> threads = std::make_unique<Result[]>(thread_count);
   for (size_t i = 0; i < thread_count; ++i) {
     size_t thread_id = i + 1;
-    Splitmix local_rng = rng.split();
-    threads[i] = std::async(std::launch::async, search, local_rng, thread_id, work_per_thread);
+    threads[i] = std::async(std::launch::async, search, std::ref(counter), total, thread_id, seed);
   }
 
   std::ofstream fout("candidates.csv");
-  fout << "Multiplier,Spectral mod B,Spectral mod M\n";
+  fout << "Multiplier,Spectral mod B,MinFM mod B,Spectral mod M,MinFM mod M\n";
 
-  std::vector main_result = search(rng, 0, remaining_work);
+  std::vector main_result = search(counter, total, 0, seed);
 
   for (size_t i = 0; i < thread_count; ++i) {
     for (const Candidate &candidate : threads[i].get()) {
-      fout << hex(candidate.multiplier) << ',' << candidate.spectral_b << ',' << candidate.spectral_m << '\n';
+      fout << hex(candidate.multiplier) << ',' << candidate.spectral_b << ',' << candidate.min_fm_b << ',' << candidate.spectral_m << ',' << candidate.min_fm_m << '\n';
     }
   }
 
   for (const Candidate &candidate : main_result) {
-    fout << hex(candidate.multiplier) << ',' << candidate.spectral_b << ',' << candidate.spectral_m << '\n';
+    fout << hex(candidate.multiplier) << ',' << candidate.spectral_b << ',' << candidate.min_fm_b << ',' << candidate.spectral_m << ',' << candidate.min_fm_m << '\n';
   }
 
   return 0;

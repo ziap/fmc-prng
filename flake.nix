@@ -40,6 +40,7 @@
 
         (pkgs.python312.withPackages (python-pkgs: [
           python-pkgs.pandas
+          python-pkgs.matplotlib
         ]))
 
         pkgs.pyright

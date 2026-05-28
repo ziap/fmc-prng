@@ -1,6 +1,6 @@
 const Fmc256 = @This();
 
-const MUL = 0xfffff6827807261d;
+const MUL = 0xfff741454b88163d;
 const endian = @import("builtin").target.cpu.arch.endian();
 
 state: [4]u64,
