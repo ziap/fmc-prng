@@ -9,7 +9,7 @@ data.drop_duplicates(inplace=True)
 data["min_fm"] = data[["MinFM mod B", "MinFM mod M"]].min(axis=1)
 data["geom_mean"] = (data["Spectral mod B"] * data["Spectral mod M"]) ** 0.5
 
-threshold = data["min_fm"].quantile(0.99)
+threshold = data["min_fm"].quantile(0.999)
 survivors = data.loc[data["min_fm"] >= threshold]
 chosen = survivors.loc[survivors["geom_mean"].idxmax()]
 

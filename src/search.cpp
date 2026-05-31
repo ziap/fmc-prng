@@ -183,7 +183,7 @@ std::vector<Candidate> search(std::atomic<size_t> &counter, size_t total, size_t
 
 int main(void) {
   size_t thread_count = std::thread::hardware_concurrency() - 1;
-  size_t total = 4294967296;
+  size_t total = 68719476736;
 
   uint64_t seed = splitmix(42);
 
